@@ -1,0 +1,32 @@
+# EvidenceDesk Local Development Infrastructure
+#
+# SECURITY GUIDELINES:
+# - Strictly for local development and evaluation.
+# - Placeholder passwords (e.g. 'replace_with_a_local_secret') are for local use only.
+# - Port binding is explicitly pinned to loopback (127.0.0.1) to prevent network exposure.
+# - Never commit real production secrets or credentials.
+
+services:
+  db:
+
+    image: pgvector/pgvector:0.8.0-pg16
+    container_name: evidencedesk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-evidencedesk}
+      POSTGRES_USER: ${POSTGRES_USER:-evidencedesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-replace_with_a_local_secret}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evidencedesk} -d ${POSTGRES_DB:-evidencedesk}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres_data:
+    name: evidencedesk_postgres_data

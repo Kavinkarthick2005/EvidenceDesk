@@ -96,9 +96,26 @@ git clone <repository-url>
 cd EvidenceTask
 ```
 
-The repository currently contains project documentation and configuration placeholders. There is no application startup command yet.
+### Database service and migrations
 
-Do not copy real credentials into tracked files. `.env.example` is intended to contain safe placeholder values only.
+Local database services are managed with Docker Compose and Alembic.
+
+1. **Start PostgreSQL with pgvector**:
+   ```powershell
+   docker compose up -d db
+   ```
+2. **Apply migrations**:
+   ```powershell
+   .\.venv\Scripts\alembic.exe upgrade head
+   ```
+3. **Stop PostgreSQL safely** (preserves persisted volume data):
+   ```powershell
+   docker compose stop db
+   ```
+   > **Note:** Do not run `docker compose down -v` unless you explicitly intend to delete the persistent database volume.
+
+Do not copy real credentials into tracked files. `.env.example` contains safe local-development defaults.
+
 
 ## Development workflow
 

@@ -3,9 +3,13 @@
 from functools import lru_cache
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL, make_url
+
+
 
 
 def get_default_env_file() -> Path | None:
@@ -58,10 +62,43 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     VERSION: str = "0.1.0"
 
+    # PostgreSQL Configuration
+    POSTGRES_DB: str = "evidencedesk"
+    POSTGRES_USER: str = "evidencedesk"
+    POSTGRES_PASSWORD: str = "replace_with_a_local_secret"
+    POSTGRES_HOST: str = "127.0.0.1"
+    POSTGRES_PORT: int = 5432
+    DATABASE_URL: str | None = None
+
+    @model_validator(mode="after")
+    def assemble_database_url(self) -> Self:
+        """Ensure DATABASE_URL is constructed safely with URL encoding if not provided."""
+        if not self.DATABASE_URL:
+            url = URL.create(
+                drivername="postgresql+psycopg",
+                username=self.POSTGRES_USER,
+                password=self.POSTGRES_PASSWORD,
+                host=self.POSTGRES_HOST,
+                port=self.POSTGRES_PORT,
+                database=self.POSTGRES_DB,
+            )
+            self.DATABASE_URL = url.render_as_string(hide_password=False)
+        return self
+
+    @property
+    def safe_database_url(self) -> str:
+        """Return a sanitized version of DATABASE_URL with the password masked."""
+        try:
+            return make_url(self.DATABASE_URL).render_as_string(hide_password=True)
+        except Exception:
+            return "[REDACTED]"
+
+
     def __init__(self, *args: Any, _env_file: Any = ..., **kwargs: Any) -> None:
         if _env_file is ...:
             _env_file = get_default_env_file()
         super().__init__(*args, _env_file=_env_file, **kwargs)
+
 
 
 @lru_cache
