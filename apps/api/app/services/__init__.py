@@ -19,9 +19,14 @@ from app.services.exceptions import (
     IngestionError,
     IngestionExtractionError,
     IngestionPersistenceError,
+    InvalidQueryError,
+    InvalidScoreThresholdError,
+    InvalidTopKError,
+    RetrievalError,
     UnsupportedDocumentTypeError,
 )
 from app.services.ingestion import IngestionResult, IngestionService
+from app.services.retrieval import RetrievalService
 
 __all__ = [
     "ChunkPersistenceError",
@@ -44,5 +49,10 @@ __all__ = [
     "IngestionPersistenceError",
     "IngestionResult",
     "IngestionService",
+    "InvalidQueryError",
+    "InvalidScoreThresholdError",
+    "InvalidTopKError",
+    "RetrievalError",
+    "RetrievalService",
     "UnsupportedDocumentTypeError",
 ]

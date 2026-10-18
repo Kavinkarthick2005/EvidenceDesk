@@ -63,3 +63,19 @@ class IngestionChunkingError(IngestionError):
 
 class IngestionPersistenceError(IngestionError):
     """Raised when persisting or replacing chunks in the database fails during ingestion."""
+
+
+class RetrievalError(Exception):
+    """Base exception for all retrieval service errors."""
+
+
+class InvalidQueryError(RetrievalError):
+    """Raised when a query string is empty, whitespace-only, or exceeds character limits."""
+
+
+class InvalidTopKError(RetrievalError):
+    """Raised when top_k parameter is outside the permitted range [1, 50]."""
+
+
+class InvalidScoreThresholdError(RetrievalError):
+    """Raised when score_threshold parameter is outside the valid range [-1.0, 1.0]."""
