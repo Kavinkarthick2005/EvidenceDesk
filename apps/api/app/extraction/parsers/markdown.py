@@ -1,5 +1,7 @@
 """Markdown document extractor preserving structure, headings, and raw text."""
 
+from typing import Any
+
 from markdown_it import MarkdownIt
 
 from app.extraction.exceptions import (
@@ -50,10 +52,12 @@ class MarkdownExtractor:
                 level = int(token.tag[1:]) if len(token.tag) > 1 and token.tag[1:].isdigit() else 1
                 title = tokens[i + 1].content if i + 1 < len(tokens) else ""
                 start_line = token.map[0] if token.map else 0
+                end_line = token.map[1] if token.map else start_line + 1
                 headings.append({
                     "level": level,
                     "title": title,
                     "start_line": start_line,
+                    "end_line": end_line,
                 })
 
             if token.children:
@@ -89,27 +93,95 @@ class MarkdownExtractor:
                     )
 
             # Sections under each heading
+            pending_start: int | None = None
+            pending_parent_headings: list[dict[str, Any]] = []
+
             for idx, h in enumerate(headings):
                 start = int(h["start_line"])  # type: ignore[arg-type]
+                heading_end = int(h.get("end_line", start + 1))  # type: ignore[arg-type]
                 end = (
                     int(headings[idx + 1]["start_line"])  # type: ignore[arg-type]
                     if idx + 1 < len(headings)
                     else len(lines)
                 )
-                section_lines = lines[start:end]
+
+                # An orphan heading has subsequent headings and no body lines before the next heading
+                body_lines = [l for l in lines[heading_end:end] if l.strip()]
+                has_subsequent = idx + 1 < len(headings)
+
+                if not body_lines:
+                    if has_subsequent:
+                        # Orphan heading before subsequent headings: accumulate as prefix
+                        if pending_start is None:
+                            pending_start = start
+                        pending_parent_headings.append({
+                            "title": str(h["title"]),
+                            "level": int(h["level"]),  # type: ignore[arg-type]
+                            "start_line": start,
+                        })
+                        continue
+                    else:
+                        # Trailing orphan heading at document end: coalesce with preceding element if present
+                        if elements:
+                            last_el = elements[-1]
+                            prev_start = last_el.metadata.get("start_line", 0)
+                            extended_text = "\n".join(lines[prev_start:end]).strip()
+                            new_meta = dict(last_el.metadata)
+                            new_meta["end_line"] = end
+                            trailing = list(new_meta.get("trailing_headings", []))
+                            trailing.append({
+                                "title": str(h["title"]),
+                                "level": int(h["level"]),  # type: ignore[arg-type]
+                                "start_line": start,
+                            })
+                            new_meta["trailing_headings"] = trailing
+                            elements[-1] = ExtractedElement(
+                                text=extended_text,
+                                heading=last_el.heading,
+                                heading_level=last_el.heading_level,
+                                metadata=new_meta,
+                            )
+                            continue
+                        else:
+                            # Document contains only headings without body text
+                            effective_start = pending_start if pending_start is not None else start
+                            section_text = "\n".join(lines[effective_start:end]).strip()
+                            elements.append(
+                                ExtractedElement(
+                                    text=section_text,
+                                    heading=str(headings[0]["title"]),
+                                    heading_level=int(headings[0]["level"]),  # type: ignore[arg-type]
+                                    metadata={
+                                        "start_line": effective_start,
+                                        "end_line": end,
+                                        "heading_level": int(headings[0]["level"]),  # type: ignore[arg-type]
+                                    },
+                                )
+                            )
+                            continue
+
+                effective_start = pending_start if pending_start is not None else start
+                section_lines = lines[effective_start:end]
                 section_text = "\n".join(section_lines).strip()
+
+                element_metadata: dict[str, Any] = {
+                    "start_line": effective_start,
+                    "end_line": end,
+                    "heading_level": int(h["level"]),  # type: ignore[arg-type]
+                }
+                if pending_parent_headings:
+                    element_metadata["parent_headings"] = list(pending_parent_headings)
+
                 elements.append(
                     ExtractedElement(
                         text=section_text,
                         heading=str(h["title"]),
                         heading_level=int(h["level"]),  # type: ignore[arg-type]
-                        metadata={
-                            "start_line": start,
-                            "end_line": end,
-                            "heading_level": int(h["level"]),  # type: ignore[arg-type]
-                        },
+                        metadata=element_metadata,
                     )
                 )
+                pending_start = None
+                pending_parent_headings = []
 
         heading_metadata = [
             {"level": h["level"], "title": h["title"], "start_line": h["start_line"]}

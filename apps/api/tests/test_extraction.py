@@ -442,6 +442,118 @@ More H2 content.
         assert el.metadata["start_line"] < el.metadata["end_line"]
 
 
+def test_markdown_orphan_heading_coalesces_with_subsequent_section() -> None:
+    extractor = MarkdownExtractor()
+    md_content = """# EvidenceDesk Platform Reference Manual
+
+## 1. Storage and Document Limits
+The maximum permitted upload size is 25 MB.
+""".encode()
+
+    result = extractor.extract(md_content)
+
+    # The orphan H1 should not produce an independent content-free element.
+    # It must coalesce into the subsequent section that has body content.
+    assert len(result.elements) == 1
+    el = result.elements[0]
+    assert el.heading == "1. Storage and Document Limits"
+    assert el.heading_level == 2
+    assert "# EvidenceDesk Platform Reference Manual" in el.text
+    assert "The maximum permitted upload size is 25 MB." in el.text
+    assert "parent_headings" in el.metadata
+    assert el.metadata["parent_headings"] == [
+        {"title": "EvidenceDesk Platform Reference Manual", "level": 1, "start_line": 0}
+    ]
+
+
+def test_markdown_multiple_consecutive_orphan_headings() -> None:
+    extractor = MarkdownExtractor()
+    md_content = """# System Architecture Survey
+## Distributed Databases
+### 1. Vector Search Engines
+Passages are indexed into dense vectors.
+""".encode()
+
+    result = extractor.extract(md_content)
+
+    assert len(result.elements) == 1
+    el = result.elements[0]
+    assert el.heading == "1. Vector Search Engines"
+    assert el.heading_level == 3
+    assert "# System Architecture Survey" in el.text
+    assert "## Distributed Databases" in el.text
+    assert "Passages are indexed into dense vectors." in el.text
+    assert "parent_headings" in el.metadata
+    assert len(el.metadata["parent_headings"]) == 2
+    assert el.metadata["parent_headings"][0]["title"] == "System Architecture Survey"
+    assert el.metadata["parent_headings"][1]["title"] == "Distributed Databases"
+
+
+def test_markdown_trailing_orphan_heading_coalesces_with_preceding_section() -> None:
+    extractor = MarkdownExtractor()
+    md_content = """# Section One
+Body text of section one.
+
+## Empty Trailing Section
+""".encode()
+
+    result = extractor.extract(md_content)
+
+    # The trailing orphan heading must not produce a content-free title-only chunk.
+    # It coalesces with the preceding section and is recorded in trailing_headings metadata.
+    assert len(result.elements) == 1
+    el = result.elements[0]
+    assert el.heading == "Section One"
+    assert "Body text of section one." in el.text
+    assert "## Empty Trailing Section" in el.text
+    assert "trailing_headings" in el.metadata
+    assert el.metadata["trailing_headings"] == [
+        {"title": "Empty Trailing Section", "level": 2, "start_line": 3}
+    ]
+
+
+def test_markdown_document_containing_only_headings() -> None:
+    extractor = MarkdownExtractor()
+    md_content = """# Main Title
+## Subheading 1
+### Subheading 2
+""".encode()
+
+    result = extractor.extract(md_content)
+
+    # Document with only headings produces a single element covering all headings
+    assert len(result.elements) == 1
+    el = result.elements[0]
+    assert el.heading == "Main Title"
+    assert "# Main Title" in el.text
+    assert "## Subheading 1" in el.text
+    assert "### Subheading 2" in el.text
+
+
+def test_markdown_heading_followed_by_blank_lines_before_next_heading() -> None:
+    extractor = MarkdownExtractor()
+    md_content = """# Main Heading
+
+
+
+## Section Two
+Body text of section two.
+""".encode()
+
+    result = extractor.extract(md_content)
+
+    assert len(result.elements) == 1
+    el = result.elements[0]
+    assert el.heading == "Section Two"
+    assert el.heading_level == 2
+    assert "# Main Heading" in el.text
+    assert "## Section Two" in el.text
+    assert "Body text of section two." in el.text
+    assert "parent_headings" in el.metadata
+    assert el.metadata["parent_headings"][0]["title"] == "Main Heading"
+
+
+
 # ==============================================================================
 # Plain Text Extraction Tests
 # ==============================================================================
