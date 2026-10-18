@@ -360,9 +360,9 @@ def test_persistence_failure_marks_failed_and_preserves_prior_chunks(
         with pytest.raises(IngestionPersistenceError, match="DB persistence constraint error"):
             ingestion_service.ingest_document(doc.id)
 
-    # Step 3: Document status must be FAILED, not READY
+    # Step 3: Document status remains READY to preserve last successfully indexed state
     db_session.refresh(doc)
-    assert doc.status == DocumentStatus.FAILED
+    assert doc.status == DocumentStatus.READY
 
     # Step 4: Prior chunks must remain intact in the database
     with Session(sqlite_engine) as fresh_session:
@@ -504,8 +504,8 @@ def test_ready_commit_failure_raises_persistence_error_and_does_not_return_resul
     def commit_hook() -> None:
         nonlocal commit_calls
         commit_calls += 1
-        # Commit 1 is PROCESSING, commit 2 is store_chunks, commit 3 is READY
-        if commit_calls == 3:
+        # Commit 1 is PROCESSING, Commit 2 is coordinated persistence (chunks + embeddings + READY)
+        if commit_calls == 2:
             raise SQLAlchemyError("Simulated READY commit failure")
         original_commit()
 
@@ -541,7 +541,8 @@ def test_ready_operational_error_reports_ambiguous_outcome(
     def commit_hook() -> None:
         nonlocal commit_calls
         commit_calls += 1
-        if commit_calls == 3:
+        # Commit 1 is PROCESSING, Commit 2 is coordinated persistence (chunks + embeddings + READY)
+        if commit_calls == 2:
             raise op_err
         original_commit()
 

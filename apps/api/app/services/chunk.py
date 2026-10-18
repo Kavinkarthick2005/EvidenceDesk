@@ -252,6 +252,7 @@ class ChunkPersistenceService:
         chunks: Sequence[DomainChunk | ChunkModel | dict[str, Any]] | ChunkingResult,
         replace: bool = True,
         allow_empty: bool = False,
+        commit: bool = True,
     ) -> list[ChunkModel]:
         """Validate and persist chunks for a document atomically.
 
@@ -261,6 +262,9 @@ class ChunkPersistenceService:
             replace: If True (default), atomically removes previous chunks for this document.
             allow_empty: If True, allows persisting an empty chunk set (clearing previous chunks).
                          Defaults to False to prevent accidental loss of chunks.
+            commit: If True (default), commits transaction and refreshes ORM instances.
+                    If False, stages changes and flushes without committing or refreshing,
+                    enabling coordinated atomic persistence with embedding records.
 
         Returns:
             List of persisted Chunk ORM instances in ascending chunk_index order.
@@ -285,7 +289,10 @@ class ChunkPersistenceService:
             if replace:
                 try:
                     self.db.execute(sa.delete(ChunkModel).where(ChunkModel.document_id == doc_uuid))
-                    self.db.commit()
+                    if commit:
+                        self.db.commit()
+                    else:
+                        self.db.flush()
                 except OperationalError as conn_err:
                     try:
                         self.db.rollback()
@@ -354,6 +361,10 @@ class ChunkPersistenceService:
             raise ChunkPersistenceError(
                 f"Database persistence failed during flush for document '{doc_uuid}': {flush_err}"
             ) from flush_err
+
+        # If staging mode is requested, return flushed instances without committing or refreshing
+        if not commit:
+            return orm_chunks
 
         # Phase B: Issue COMMIT.
         # If commit raises OperationalError, the outcome is ambiguous (connection dropped

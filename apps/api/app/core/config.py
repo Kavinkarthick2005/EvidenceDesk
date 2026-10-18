@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     DOCUMENT_STORAGE_PATH: str = "./data/documents"
     MAX_UPLOAD_SIZE_MB: int = 25
 
+    # Embedding configuration
+    EMBEDDING_PROVIDER: str = "mock"
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    EMBEDDING_DIMENSION: int = 384
+    EMBEDDING_BATCH_SIZE: int = 32
+    EMBEDDING_DEVICE: str = "cpu"
+    EMBEDDING_NUM_THREADS: int | None = None
+
     @property
     def resolved_document_storage_path(self) -> Path:
         """Resolve DOCUMENT_STORAGE_PATH to an absolute path."""

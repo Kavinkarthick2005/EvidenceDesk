@@ -12,6 +12,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.document import Document
+    from app.models.embedding import ChunkEmbedding
 
 
 class Chunk(Base):
@@ -119,6 +120,11 @@ class Chunk(Base):
     document: Mapped["Document"] = relationship(
         "Document",
         back_populates="chunks",
+    )
+    embeddings: Mapped[list["ChunkEmbedding"]] = relationship(
+        "ChunkEmbedding",
+        back_populates="chunk",
+        cascade="all, delete-orphan",
     )
 
     __table_args__ = (

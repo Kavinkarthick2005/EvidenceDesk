@@ -19,6 +19,8 @@ dependencies = [
     "pypdf>=5.0.0",
     "markdown-it-py>=3.0.0",
     "tiktoken>=0.7.0",
+    "pgvector>=0.3.0",
+    "sentence-transformers>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +38,9 @@ pythonpath = ["."]
 filterwarnings = [
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:DeprecationWarning",
+]
+markers = [
+    "integration: mark test as integration test requiring live services or model weights",
 ]
 
 

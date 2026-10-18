@@ -2,6 +2,7 @@
 
 from app.services.chunk import ChunkPersistenceService
 from app.services.document import DocumentService
+from app.services.embedding import EmbeddingService
 from app.services.exceptions import (
     ChunkPersistenceError,
     ChunkServiceError,
@@ -34,6 +35,7 @@ __all__ = [
     "DocumentSizeLimitError",
     "DocumentStorageError",
     "DocumentValidationError",
+    "EmbeddingService",
     "EmptyChunkSetError",
     "EmptyDocumentError",
     "IngestionChunkingError",
