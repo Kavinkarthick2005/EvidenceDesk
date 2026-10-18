@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     EMBEDDING_DEVICE: str = "cpu"
     EMBEDDING_NUM_THREADS: int | None = None
 
+    # Generation configuration
+    GENERATION_PROVIDER: str = "mock"
+    GENERATION_MODEL: str = "mock-generator-v1"
+
     @property
     def resolved_document_storage_path(self) -> Path:
         """Resolve DOCUMENT_STORAGE_PATH to an absolute path."""
