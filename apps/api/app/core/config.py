@@ -70,6 +70,22 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     DATABASE_URL: str | None = None
 
+    # Document storage configuration
+    DOCUMENT_STORAGE_PATH: str = "./data/documents"
+    MAX_UPLOAD_SIZE_MB: int = 25
+
+    @property
+    def resolved_document_storage_path(self) -> Path:
+        """Resolve DOCUMENT_STORAGE_PATH to an absolute path."""
+        path = Path(self.DOCUMENT_STORAGE_PATH)
+        if path.is_absolute():
+            return path
+        try:
+            repo_root = Path(__file__).resolve().parents[4]
+            return (repo_root / path).resolve()
+        except IndexError:
+            return path.resolve()
+
     @model_validator(mode="after")
     def assemble_database_url(self) -> Self:
         """Ensure DATABASE_URL is constructed safely with URL encoding if not provided."""

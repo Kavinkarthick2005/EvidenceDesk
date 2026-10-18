@@ -15,14 +15,17 @@ if str(API_ROOT) not in sys.path:
 
 from app.core.config import Settings, get_settings
 from app.main import create_app
+from app.storage import reset_storage_state
 
 
 @pytest.fixture(autouse=True)
 def isolate_env() -> Generator[None, None, None]:
-    """Ensure tests run in isolation and clear get_settings cache before and after each test."""
+    """Ensure tests run in isolation and clear get_settings and storage caches before and after each test."""
     get_settings.cache_clear()
+    reset_storage_state()
     yield
     get_settings.cache_clear()
+    reset_storage_state()
 
 
 @pytest.fixture
