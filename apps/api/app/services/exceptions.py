@@ -47,3 +47,19 @@ class EmptyChunkSetError(ChunkValidationError):
 
 class ChunkPersistenceError(ChunkServiceError):
     """Raised when chunk persistence, atomic replacement, or transaction commit fails."""
+
+
+class IngestionError(Exception):
+    """Base exception for all ingestion pipeline errors."""
+
+
+class IngestionExtractionError(IngestionError):
+    """Raised when document text or structure extraction fails during ingestion."""
+
+
+class IngestionChunkingError(IngestionError):
+    """Raised when partitioning extracted content into chunks fails during ingestion."""
+
+
+class IngestionPersistenceError(IngestionError):
+    """Raised when persisting or replacing chunks in the database fails during ingestion."""

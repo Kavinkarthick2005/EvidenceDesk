@@ -14,8 +14,13 @@ from app.services.exceptions import (
     DocumentValidationError,
     EmptyChunkSetError,
     EmptyDocumentError,
+    IngestionChunkingError,
+    IngestionError,
+    IngestionExtractionError,
+    IngestionPersistenceError,
     UnsupportedDocumentTypeError,
 )
+from app.services.ingestion import IngestionResult, IngestionService
 
 __all__ = [
     "ChunkPersistenceError",
@@ -31,5 +36,11 @@ __all__ = [
     "DocumentValidationError",
     "EmptyChunkSetError",
     "EmptyDocumentError",
+    "IngestionChunkingError",
+    "IngestionError",
+    "IngestionExtractionError",
+    "IngestionPersistenceError",
+    "IngestionResult",
+    "IngestionService",
     "UnsupportedDocumentTypeError",
 ]
