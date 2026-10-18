@@ -19,3 +19,19 @@ class GenerationInferenceError(GenerationError):
 
 class GenerationTimeoutError(GenerationInferenceError):
     """Raised when generation request exceeds configured timeout."""
+
+
+class ContextBuilderError(GenerationError):
+    """Base exception for context builder failures."""
+
+
+class DuplicateEvidenceError(ContextBuilderError):
+    """Raised when duplicate evidence items or chunk UUIDs are supplied to context builder."""
+
+
+class InvalidEvidenceError(ContextBuilderError):
+    """Raised when supplied evidence items are malformed, missing required fields, or of invalid type."""
+
+
+class CitationValidationError(GenerationError):
+    """Raised when citation validation fails due to malformed input or unrecoverable error."""

@@ -4,11 +4,25 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.core.config import Settings, get_settings
+from app.generation.citation import (
+    CitationValidationResult,
+    CitationValidator,
+    ResolvedCitation,
+)
+from app.generation.context import (
+    ContextBuilder,
+    EvidenceContext,
+    EvidenceSourceMapping,
+)
 from app.generation.exceptions import (
+    CitationValidationError,
+    ContextBuilderError,
+    DuplicateEvidenceError,
     GenerationConfigurationError,
     GenerationError,
     GenerationInferenceError,
     GenerationTimeoutError,
+    InvalidEvidenceError,
     InvalidPromptError,
 )
 from app.generation.interface import (
@@ -69,15 +83,25 @@ def reset_generation_state() -> None:
 
 
 __all__ = [
+    "CitationValidationError",
+    "CitationValidationResult",
+    "CitationValidator",
+    "ContextBuilder",
+    "ContextBuilderError",
     "DeterministicMockGenerator",
+    "DuplicateEvidenceError",
+    "EvidenceContext",
     "EvidenceItem",
+    "EvidenceSourceMapping",
     "GenerationConfigurationError",
     "GenerationError",
     "GenerationInferenceError",
     "GenerationProvider",
     "GenerationResult",
     "GenerationTimeoutError",
+    "InvalidEvidenceError",
     "InvalidPromptError",
+    "ResolvedCitation",
     "get_generation_provider",
     "reset_generation_state",
 ]
