@@ -22,9 +22,9 @@ dist/
 coverage/
 
 # Local databases, uploads, and model data
-data/
-uploads/
-models/
+/data/
+/uploads/
+/models/
 *.db
 *.sqlite
 *.sqlite3

@@ -15,6 +15,7 @@ if str(API_ROOT) not in sys.path:
 from app.core.config import get_settings
 from app.db.base import Base
 from app.db.session import create_db_engine
+import app.models  # noqa: F401
 
 config = context.config
 
