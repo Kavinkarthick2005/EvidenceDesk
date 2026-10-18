@@ -31,3 +31,19 @@ class DocumentStorageError(DocumentServiceError):
 
 class DocumentPersistenceError(DocumentServiceError):
     """Raised when database persistence or transaction commit fails."""
+
+
+class ChunkServiceError(Exception):
+    """Base exception for all chunk service errors."""
+
+
+class ChunkValidationError(ChunkServiceError):
+    """Raised when chunk payload, offsets, ordering, or metadata fails validation."""
+
+
+class EmptyChunkSetError(ChunkValidationError):
+    """Raised when an empty chunk set is provided where chunks are required."""
+
+
+class ChunkPersistenceError(ChunkServiceError):
+    """Raised when chunk persistence, atomic replacement, or transaction commit fails."""

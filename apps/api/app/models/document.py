@@ -4,10 +4,15 @@ from datetime import datetime
 from enum import StrEnum
 import uuid
 
+from typing import TYPE_CHECKING
+
 import sqlalchemy as sa
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.chunk import Chunk
 
 
 class DocumentStatus(StrEnum):
@@ -88,6 +93,14 @@ class Document(Base):
         onupdate=sa.func.now(),
         nullable=False,
         doc="Timezone-aware timestamp recording when the record was last modified.",
+    )
+
+    # Relationships
+    chunks: Mapped[list["Chunk"]] = relationship(
+        "Chunk",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="Chunk.chunk_index",
     )
 
     __table_args__ = (
