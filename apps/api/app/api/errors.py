@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.generation.exceptions import GenerationError
 from app.services.exceptions import (
     DocumentNotFoundError,
     DocumentPersistenceError,
@@ -13,6 +14,8 @@ from app.services.exceptions import (
     DocumentStorageError,
     DocumentValidationError,
     EmptyDocumentError,
+    InvalidQueryError,
+    RetrievalError,
     UnsupportedDocumentTypeError,
 )
 
@@ -107,4 +110,36 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "An internal service error occurred."},
+        )
+
+    @app.exception_handler(InvalidQueryError)
+    async def invalid_query_handler(
+        request: Request,
+        exc: InvalidQueryError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(RetrievalError)
+    async def retrieval_error_handler(
+        request: Request,
+        exc: RetrievalError,
+    ) -> JSONResponse:
+        logger.error("Retrieval operation failure: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Retrieval operation failed."},
+        )
+
+    @app.exception_handler(GenerationError)
+    async def generation_error_handler(
+        request: Request,
+        exc: GenerationError,
+    ) -> JSONResponse:
+        logger.error("Generation operation failure: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Answer generation failed."},
         )

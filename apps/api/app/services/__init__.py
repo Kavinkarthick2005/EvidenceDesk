@@ -26,6 +26,7 @@ from app.services.exceptions import (
     UnsupportedDocumentTypeError,
 )
 from app.services.ingestion import IngestionResult, IngestionService
+from app.services.qa import QuestionAnsweringService
 from app.services.retrieval import RetrievalService
 
 __all__ = [
@@ -52,6 +53,7 @@ __all__ = [
     "InvalidQueryError",
     "InvalidScoreThresholdError",
     "InvalidTopKError",
+    "QuestionAnsweringService",
     "RetrievalError",
     "RetrievalService",
     "UnsupportedDocumentTypeError",
