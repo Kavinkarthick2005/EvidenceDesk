@@ -280,3 +280,70 @@ def test_chunk_embedding_dimension_constraint(db_session: Session) -> None:
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+
+def test_sentence_transformers_query_instruction_prefixing_isolated() -> None:
+    """Verify SentenceTransformersEmbeddingProvider prefixes only query embeddings and leaves document texts unchanged."""
+    from unittest.mock import MagicMock, patch
+    import numpy as np
+    from app.embeddings.sentence_transformers import SentenceTransformersEmbeddingProvider
+
+    with patch("sentence_transformers.SentenceTransformer") as mock_st_cls:
+        mock_model = MagicMock()
+        mock_model.get_embedding_dimension.return_value = 384
+        mock_model.max_seq_length = 512
+        mock_st_cls.return_value = mock_model
+
+        # Unit-normalized mock output
+        dummy_vec = np.ones((1, 384), dtype=np.float32) / math.sqrt(384)
+        mock_model.encode.side_effect = lambda texts, **kwargs: np.repeat(dummy_vec, len(texts), axis=0)
+
+        # 1. BGE model defaults to BGE query instruction prefix
+        bge_provider = SentenceTransformersEmbeddingProvider(
+            model_name_or_path="BAAI/bge-small-en-v1.5",
+            expected_dimension=384,
+            device="cpu",
+        )
+        assert bge_provider.query_instruction_prefix == "Represent this sentence for searching relevant passages: "
+
+        # 2. embed_texts must pass chunk texts unchanged (no prefix)
+        bge_provider.embed_texts(["Chunk passage one", "Chunk passage two"])
+        assert mock_model.encode.call_args[0][0] == ["Chunk passage one", "Chunk passage two"]
+
+        # 3. embed_query must prepend query instruction prefix
+        bge_provider.embed_query("User search question")
+        assert mock_model.encode.call_args[0][0] == [
+            "Represent this sentence for searching relevant passages: User search question"
+        ]
+
+        # 4. Non-BGE model defaults to empty prefix (safe compatibility)
+        minilm_provider = SentenceTransformersEmbeddingProvider(
+            model_name_or_path="sentence-transformers/all-MiniLM-L6-v2",
+            expected_dimension=384,
+            device="cpu",
+        )
+        assert minilm_provider.query_instruction_prefix == ""
+        minilm_provider.embed_query("MiniLM query")
+        assert mock_model.encode.call_args[0][0] == ["MiniLM query"]
+
+        # 5. Explicitly disabling prefix on BGE model passes raw query
+        unprefixed_bge = SentenceTransformersEmbeddingProvider(
+            model_name_or_path="BAAI/bge-small-en-v1.5",
+            expected_dimension=384,
+            query_instruction_prefix="",
+        )
+        assert unprefixed_bge.query_instruction_prefix == ""
+        unprefixed_bge.embed_query("Raw search query")
+        assert mock_model.encode.call_args[0][0] == ["Raw search query"]
+
+        # 6. Truncation detection accounts for prefix tokens
+        mock_tokenizer = MagicMock()
+        mock_model.tokenizer = mock_tokenizer
+        # Return 515 tokens for prefixed text, triggering truncation count increment
+        mock_tokenizer.encode.return_value = list(range(515))
+
+        assert bge_provider.truncated_chunks_count == 0
+        bge_provider.embed_query("Very long query exceeding window")
+        assert bge_provider.truncated_chunks_count == 1
+        # Tokenizer encode was called with prefixed text
+        assert mock_tokenizer.encode.call_args[0][0].startswith("Represent this sentence for searching relevant passages: ")

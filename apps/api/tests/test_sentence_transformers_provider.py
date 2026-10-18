@@ -64,3 +64,36 @@ def test_real_model_dimension_mismatch_raises_error() -> None:
             expected_dimension=768,
             device="cpu",
         )
+
+
+def test_real_bge_small_query_prefix_behavior() -> None:
+    """Verify BGE-small applies query instruction prefix to embed_query and isolates embed_texts."""
+    provider = SentenceTransformersEmbeddingProvider(
+        model_name_or_path="BAAI/bge-small-en-v1.5",
+        expected_dimension=384,
+        device="cpu",
+    )
+    assert provider.query_instruction_prefix == SentenceTransformersEmbeddingProvider.BGE_QUERY_INSTRUCTION_PREFIX
+
+    query_text = "Which database engine and extension are used for vector storage?"
+    query_vector = provider.embed_query(query_text)
+    doc_vectors = provider.embed_texts([query_text])
+    doc_vector = doc_vectors[0]
+    explicit_prefixed_vector = provider.embed_texts([f"{provider.query_instruction_prefix}{query_text}"])[0]
+
+    # 1. embed_query output matches explicit prefixing via embed_texts
+    assert query_vector == pytest.approx(explicit_prefixed_vector, abs=1e-5)
+
+    # 2. embed_texts does NOT apply prefix (document embeddings are isolated from query prefix)
+    assert query_vector != pytest.approx(doc_vector, abs=1e-3)
+
+    # 3. Disabling prefix produces identical embeddings for query and document
+    unprefixed_provider = SentenceTransformersEmbeddingProvider(
+        model_name_or_path="BAAI/bge-small-en-v1.5",
+        expected_dimension=384,
+        device="cpu",
+        query_instruction_prefix="",
+    )
+    assert unprefixed_provider.query_instruction_prefix == ""
+    unprefixed_query_vector = unprefixed_provider.embed_query(query_text)
+    assert unprefixed_query_vector == pytest.approx(doc_vector, abs=1e-5)

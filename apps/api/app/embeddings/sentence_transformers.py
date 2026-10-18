@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 class SentenceTransformersEmbeddingProvider:
     """Local embedding provider using Sentence Transformers and PyTorch on CPU/GPU."""
 
+    BGE_QUERY_INSTRUCTION_PREFIX: str = "Represent this sentence for searching relevant passages: "
+
     def __init__(
         self,
         model_name_or_path: str = "BAAI/bge-small-en-v1.5",
@@ -26,6 +28,7 @@ class SentenceTransformersEmbeddingProvider:
         device: str = "cpu",
         batch_size: int = 32,
         num_threads: int | None = None,
+        query_instruction_prefix: str | None = None,
     ) -> None:
         """Initialize SentenceTransformers model and introspect dimensions and context limits.
 
@@ -35,6 +38,8 @@ class SentenceTransformersEmbeddingProvider:
             device: Compute device ('cpu', 'cuda', etc.).
             batch_size: Inference batch size.
             num_threads: Optional CPU thread throttle for PyTorch.
+            query_instruction_prefix: Optional instruction prefix prepended to search queries.
+                If None, defaults to BGE retrieval instruction for BGE models and empty for others.
 
         Raises:
             EmbeddingModelLoadError: If model cannot be loaded.
@@ -43,6 +48,13 @@ class SentenceTransformersEmbeddingProvider:
         self._model_id = model_name_or_path
         self._batch_size = batch_size
         self._truncated_chunks_count = 0
+
+        if query_instruction_prefix is not None:
+            self._query_instruction_prefix = query_instruction_prefix
+        elif "bge" in model_name_or_path.lower():
+            self._query_instruction_prefix = self.BGE_QUERY_INSTRUCTION_PREFIX
+        else:
+            self._query_instruction_prefix = ""
 
         # Optional PyTorch thread throttling to prevent CPU starvation
         if num_threads is not None and num_threads > 0:
@@ -108,6 +120,11 @@ class SentenceTransformersEmbeddingProvider:
         """Number of text passages that exceeded max_sequence_length and were truncated."""
         return self._truncated_chunks_count
 
+    @property
+    def query_instruction_prefix(self) -> str:
+        """Instruction prefix prepended to search queries prior to embedding."""
+        return self._query_instruction_prefix
+
     def _detect_truncation(self, text: str) -> None:
         """Measure token count using the model's actual tokenizer (including special tokens)."""
         try:
@@ -166,9 +183,9 @@ class SentenceTransformersEmbeddingProvider:
         return embeddings_np.tolist()
 
     def embed_query(self, query: str) -> list[float]:
-        """Embed a single query string."""
-        self._detect_truncation(query)
-        result = self.embed_texts([query])
+        """Embed a single query string, applying query instruction prefix if configured."""
+        prefixed_query = f"{self._query_instruction_prefix}{query}" if self._query_instruction_prefix else query
+        result = self.embed_texts([prefixed_query])
         if not result:
             raise EmbeddingInferenceError("Empty query embedding output.")
         return result[0]
