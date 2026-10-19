@@ -7,7 +7,9 @@ Enforces that:
 3. Non-abstained responses with invalid, unknown, or malformed citations are rejected
    from being authoritative answers, returning safe abstentions with diagnostic details.
 4. Non-abstained responses lacking citations are rejected with abstention reason 'missing_citations'.
-5. Operational logs strictly omit user query text, prompts, chunk contents, and raw answers.
+5. Non-abstained responses containing unsupported citations are rejected
+   with abstention reason 'unsupported_citations'.
+6. Operational logs strictly omit user query text, prompts, chunk contents, and raw answers.
 """
 
 from collections.abc import Sequence
@@ -132,6 +134,7 @@ class QuestionAnsweringService:
                 citations=[],
                 unknown_citations=[],
                 malformed_citations=[],
+                unsupported_citations=[],
                 retrieved_count=0,
                 model_id=self.generation_provider.model_id,
                 retrieval_model_id=retrieval_res.model_id,
@@ -142,10 +145,17 @@ class QuestionAnsweringService:
 
         # 4. Generation
         gen_start = time.perf_counter()
-        gen_result = self.generation_provider.generate_answer(
-            query=stripped_query,
-            evidence=context.evidence_items,
-        )
+        try:
+            gen_result = self.generation_provider.generate_answer(
+                query=stripped_query,
+                evidence=context.evidence_items,
+                nonce=context.nonce,
+            )
+        except TypeError:
+            gen_result = self.generation_provider.generate_answer(
+                query=stripped_query,
+                evidence=context.evidence_items,
+            )
         gen_duration = time.perf_counter() - gen_start
 
         logger.info(
@@ -169,6 +179,7 @@ class QuestionAnsweringService:
                 citations=[],
                 unknown_citations=[],
                 malformed_citations=[],
+                unsupported_citations=[],
                 retrieved_count=len(chunks),
                 model_id=gen_result.model_id,
                 retrieval_model_id=retrieval_res.model_id,
@@ -178,12 +189,13 @@ class QuestionAnsweringService:
         val_result = self.citation_validator.validate(target=gen_result, context=context)
 
         logger.info(
-            "Citation validation complete: is_valid=%s, has_citations=%s, valid_count=%d, unknown_count=%d, malformed_count=%d",
+            "Citation validation complete: is_valid=%s, has_citations=%s, valid_count=%d, unknown_count=%d, malformed_count=%d, unsupported_count=%d",
             val_result.is_valid,
             val_result.has_citations,
             len(val_result.citations),
             len(val_result.unknown_citation_ids),
             len(val_result.malformed_citations),
+            len(val_result.unsupported_citation_ids),
         )
 
         # 7. Reject Any Answer with Unknown, Fabricated, or Malformed Citations
@@ -206,6 +218,7 @@ class QuestionAnsweringService:
                 citations=[],
                 unknown_citations=val_result.unknown_citation_ids,
                 malformed_citations=val_result.malformed_citations,
+                unsupported_citations=val_result.unsupported_citation_ids,
                 retrieved_count=len(chunks),
                 model_id=gen_result.model_id,
                 retrieval_model_id=retrieval_res.model_id,
@@ -224,6 +237,30 @@ class QuestionAnsweringService:
                 citations=[],
                 unknown_citations=[],
                 malformed_citations=[],
+                unsupported_citations=[],
+                retrieved_count=len(chunks),
+                model_id=gen_result.model_id,
+                retrieval_model_id=retrieval_res.model_id,
+            )
+
+        # 8.5 Reject Answers Containing Any Unsupported Citations (Grounding Check)
+        if val_result.has_citations and bool(val_result.unsupported_citation_ids):
+            logger.warning(
+                "One or more cited passages failed lexical grounding checks: unsupported_citations=%s. "
+                "Rejecting as ungrounded answer.",
+                val_result.unsupported_citation_ids,
+            )
+            return QAResponse(
+                query=stripped_query,
+                answer="I cannot provide an authoritative answer because the generated claims are not supported by the cited passages.",
+                is_abstained=True,
+                abstention_reason="unsupported_citations",
+                has_citations=True,
+                is_valid_citations=True,
+                citations=[],
+                unknown_citations=[],
+                malformed_citations=[],
+                unsupported_citations=val_result.unsupported_citation_ids,
                 retrieved_count=len(chunks),
                 model_id=gen_result.model_id,
                 retrieval_model_id=retrieval_res.model_id,
@@ -257,6 +294,7 @@ class QuestionAnsweringService:
             citations=resolved_citations,
             unknown_citations=[],
             malformed_citations=[],
+            unsupported_citations=val_result.unsupported_citation_ids,
             retrieved_count=len(chunks),
             model_id=gen_result.model_id,
             retrieval_model_id=retrieval_res.model_id,

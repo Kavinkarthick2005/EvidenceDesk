@@ -339,3 +339,105 @@ def test_citation_validator_nested_brackets() -> None:
     assert res_nested.is_valid is True
     assert res_nested.has_citations is True
     assert res_nested.cited_evidence_ids == ["1"]
+
+
+def test_citation_grounding_zero_overlap_detected() -> None:
+    """Verify zero content token overlap between a cited sentence and chunk is flagged in unsupported_citation_ids."""
+    c1 = make_retrieved_chunk(
+        chunk_index=0,
+        text="Employees are entitled to 15 days of annual paid leave.",
+        heading="Annual Leave",
+        document_filename="handbook.pdf",
+    )
+    ctx = ContextBuilder().build_context([c1])
+    validator = CitationValidator()
+
+    # Statement has zero lexical overlap with chunk text, heading, or filename
+    answer = "The administrative root password is SuperSecretAdmin123 [1]."
+    res = validator.validate(answer, ctx)
+
+    assert res.is_valid is True
+    assert res.has_citations is True
+    assert res.cited_evidence_ids == ["1"]
+    assert res.unsupported_citation_ids == ["1"]
+
+
+def test_citation_grounding_numeric_facts_anchor_claim() -> None:
+    """Verify numeric strings and amounts establish lexical grounding without false rejection."""
+    c1 = make_retrieved_chunk(
+        chunk_index=0,
+        text="Total capital expenditure for the cluster upgrade was $50,000.",
+        heading="Budget Allocation",
+        document_filename="financials.pdf",
+    )
+    ctx = ContextBuilder().build_context([c1])
+    validator = CitationValidator()
+
+    answer = "Expenditure totaled $50,000 [1]."
+    res = validator.validate(answer, ctx)
+
+    assert res.is_valid is True
+    assert res.unsupported_citation_ids == []
+
+
+def test_citation_grounding_heading_fallback_prevents_false_rejection() -> None:
+    """Verify words in chunk heading or document title provide grounding for section-level statements."""
+    c1 = make_retrieved_chunk(
+        chunk_index=0,
+        text="Employees receive 20 days off annually.",
+        heading="Vacation Policy",
+        document_filename="handbook.pdf",
+    )
+    ctx = ContextBuilder().build_context([c1])
+    validator = CitationValidator()
+
+    # Answer uses "vacation policy" which appears only in heading, not in passage text
+    answer = "The vacation policy governs time off [1]."
+    res = validator.validate(answer, ctx)
+
+    assert res.is_valid is True
+    assert res.unsupported_citation_ids == []
+
+
+def test_citation_grounding_micro_sentences_exempt() -> None:
+    """Verify micro-sentences with <= 2 content tokens are not flagged as unsupported."""
+    c1 = make_retrieved_chunk(
+        chunk_index=0,
+        text="The database migration finished without errors.",
+        heading="Database Status",
+        document_filename="status.md",
+    )
+    ctx = ContextBuilder().build_context([c1])
+    validator = CitationValidator()
+
+    answer = "It completed [1]."
+    res = validator.validate(answer, ctx)
+
+    assert res.is_valid is True
+    assert res.unsupported_citation_ids == []
+
+
+def test_citation_grounding_multi_sentence_mixed_grounding() -> None:
+    """Verify multi-citation answers accurately identify which citation failed grounding."""
+    c1 = make_retrieved_chunk(
+        chunk_index=0,
+        text="Company was founded in 2012 by Jane Doe.",
+        heading="Company History",
+        document_filename="about.md",
+    )
+    c2 = make_retrieved_chunk(
+        chunk_index=1,
+        text="PTO policy provides 15 days of annual leave.",
+        heading="PTO Guidelines",
+        document_filename="pto.md",
+    )
+    ctx = ContextBuilder().build_context([c1, c2])
+    validator = CitationValidator()
+
+    answer = "Jane Doe founded the company in 2012 [1]. The server root password is confidential [2]."
+    res = validator.validate(answer, ctx)
+
+    assert res.is_valid is True
+    assert res.has_citations is True
+    assert set(res.cited_evidence_ids) == {"1", "2"}
+    assert res.unsupported_citation_ids == ["2"]

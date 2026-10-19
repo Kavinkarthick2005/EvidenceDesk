@@ -130,6 +130,10 @@ class QAResponse(BaseModel):
         default_factory=list,
         description="Malformed citation markers detected in the answer text.",
     )
+    unsupported_citations: list[str] = Field(
+        default_factory=list,
+        description="Citation markers or IDs whose associated statements failed lexical grounding checks against source passages.",
+    )
     retrieved_count: int = Field(
         description="Total number of chunks retrieved from semantic search before context building.",
     )

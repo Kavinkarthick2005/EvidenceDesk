@@ -39,6 +39,65 @@ _BARE_CITATION_KEYWORDS = frozenset({"ref", "citation", "source", "evidence"})
 _FENCED_CODE_BLOCK_REGEX = re.compile(r"```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)")
 _INLINE_CODE_SPAN_REGEX = re.compile(r"`+[^\n`]*?`+")
 
+_COMMON_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "if", "because", "as", "what",
+    "which", "this", "that", "these", "those", "then", "just", "so", "than",
+    "such", "both", "through", "about", "for", "is", "of", "while", "during",
+    "to", "from", "in", "out", "on", "off", "over", "under", "again", "further",
+    "then", "once", "here", "there", "when", "where", "why", "how", "all",
+    "any", "each", "few", "more", "most", "other", "some", "no", "nor", "not",
+    "only", "own", "same", "too", "very", "can", "will", "just", "should", "now",
+    "are", "was", "were", "been", "being", "have", "has", "had", "having", "do",
+    "does", "did", "doing", "would", "could", "shall", "might", "must",
+    "he", "she", "it", "they", "we", "you", "i", "me", "him", "her", "us", "them",
+    "his", "her", "its", "their", "our", "your", "my",
+})
+
+_WORD_TOKEN_REGEX = re.compile(r"\b[a-zA-Z0-9_\-\.]{3,}\b")
+_NUMERIC_TOKEN_REGEX = re.compile(r"\b\d+(?:[\.,]\d+)*\b")
+
+
+def extract_grounding_tokens(text: str) -> set[str]:
+    """Extract normalized content tokens (non-stopwords and numbers) for grounding checks."""
+    tokens: set[str] = set()
+    lowered = text.lower()
+    for word in _WORD_TOKEN_REGEX.findall(lowered):
+        cleaned = word.strip(".-_")
+        if len(cleaned) >= 3 and cleaned not in _COMMON_STOPWORDS:
+            tokens.add(cleaned)
+    for num in _NUMERIC_TOKEN_REGEX.findall(lowered):
+        tokens.add(num.replace(",", ""))
+    return tokens
+
+
+def check_sentence_grounding(
+    sentence_text: str,
+    cited_ids: Sequence[str],
+    marker_map: Mapping[str, EvidenceSourceMapping],
+) -> list[str]:
+    """Check whether a cited sentence shares any lexical grounding with its cited passages.
+
+    Returns:
+        List of cited marker IDs that have zero lexical content token overlap with the sentence.
+    """
+    sentence_tokens = extract_grounding_tokens(sentence_text)
+    if len(sentence_tokens) <= 2:
+        return []
+
+    unsupported: list[str] = []
+    for mid in cited_ids:
+        if mid in marker_map:
+            mapping = marker_map[mid]
+            chunk_tokens = extract_grounding_tokens(mapping.text)
+            if mapping.heading:
+                chunk_tokens |= extract_grounding_tokens(mapping.heading)
+            if mapping.document_filename:
+                chunk_tokens |= extract_grounding_tokens(mapping.document_filename)
+
+            if len(sentence_tokens & chunk_tokens) == 0:
+                unsupported.append(mid)
+    return unsupported
+
 
 def strip_markdown_code(text: str) -> str:
     """Mask Markdown fenced code blocks and inline code spans with whitespace.
@@ -149,6 +208,10 @@ class CitationValidationResult(BaseModel):
     malformed_citations: list[str] = Field(
         default_factory=list,
         description="Bracketed strings identified as malformed citation attempts.",
+    )
+    unsupported_citation_ids: list[str] = Field(
+        default_factory=list,
+        description="Valid citation IDs where the cited passage shares zero lexical grounding with the claim.",
     )
     duplicate_citation_ids: list[str] = Field(
         default_factory=list,
@@ -372,6 +435,20 @@ class CitationValidator:
                         )
                     )
 
+        # Lexical grounding sanity check: verify each cited sentence against its cited passage
+        unsupported_citation_ids: list[str] = []
+        raw_sentences = re.split(r"(?<=[.!?])\s+|\n+", answer_text)
+        for s in raw_sentences:
+            s_clean = s.strip()
+            if not s_clean:
+                continue
+            s_cand_ids, _ = self.parse_bracketed_tokens(s_clean)
+            if s_cand_ids:
+                unsupported_in_s = check_sentence_grounding(s_clean, s_cand_ids, marker_map)
+                for u_id in unsupported_in_s:
+                    if u_id not in unsupported_citation_ids:
+                        unsupported_citation_ids.append(u_id)
+
         # Validity requires no unknown citation IDs and no malformed markers
         is_valid = len(unknown_citation_ids) == 0 and len(malformed_citations) == 0
         has_citations = len(valid_citations) > 0
@@ -384,6 +461,7 @@ class CitationValidator:
             citations=valid_citations,
             unknown_citation_ids=unknown_citation_ids,
             malformed_citations=malformed_citations,
+            unsupported_citation_ids=unsupported_citation_ids,
             duplicate_citation_ids=duplicate_citation_ids,
             citation_counts=citation_counts,
         )

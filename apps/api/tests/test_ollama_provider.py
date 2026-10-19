@@ -119,7 +119,7 @@ def test_ollama_request_payload_and_options() -> None:
     assert "bracketed numbers" in messages[0]["content"]
 
     assert messages[1]["role"] == "user"
-    assert "--- BEGIN RETRIEVED EVIDENCE PASSAGES ---" in messages[1]["content"]
+    assert "=== BEGIN UNTRUSTED EVIDENCE BLOCK" in messages[1]["content"]
     assert "[1] Document: test_doc.md" in messages[1]["content"]
     assert "Question: How much PTO is provided?" in messages[1]["content"]
 
