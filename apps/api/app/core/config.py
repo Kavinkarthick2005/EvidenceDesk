@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, Self
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL, make_url
 
@@ -85,6 +85,20 @@ class Settings(BaseSettings):
     # Generation configuration
     GENERATION_PROVIDER: str = "mock"
     GENERATION_MODEL: str = "mock-generator-v1"
+    OLLAMA_BASE_URL: str = Field(
+        default="http://localhost:11434",
+        min_length=1,
+        description="Local Ollama daemon base URL.",
+    )
+    OLLAMA_TIMEOUT_SECONDS: float = Field(
+        default=60.0,
+        gt=0.0,
+        description="Ollama HTTP inference timeout in seconds.",
+    )
+    OLLAMA_KEEP_ALIVE: str | None = Field(
+        default=None,
+        description="Optional keep_alive parameter for Ollama model memory caching (e.g. '5m').",
+    )
 
     @property
     def resolved_document_storage_path(self) -> Path:
