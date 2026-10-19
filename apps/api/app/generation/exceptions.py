@@ -21,6 +21,10 @@ class GenerationTimeoutError(GenerationInferenceError):
     """Raised when generation request exceeds configured timeout."""
 
 
+class GenerationConnectionError(GenerationInferenceError):
+    """Raised when upstream generation service connection fails or service is unavailable."""
+
+
 class ContextBuilderError(GenerationError):
     """Base exception for context builder failures."""
 

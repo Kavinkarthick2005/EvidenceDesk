@@ -1,6 +1,7 @@
 """Integration tests for the /qa/answer API endpoint."""
 
 import logging
+from typing import Any
 from unittest.mock import MagicMock
 import uuid
 
@@ -9,7 +10,12 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.api.deps import get_qa_service
-from app.generation.exceptions import GenerationInferenceError
+from app.generation.exceptions import (
+    GenerationConnectionError,
+    GenerationInferenceError,
+    GenerationTimeoutError,
+)
+from app.generation.interface import GenerationResult
 from app.generation.mock import DeterministicMockGenerator
 from app.schemas.qa import QACitation, QAResponse
 from app.schemas.retrieval import RetrievalResponse, RetrievedChunk
@@ -244,6 +250,109 @@ def test_qa_route_generation_failure_returns_safe_500(client: TestClient) -> Non
 
         assert data["detail"] == "Answer generation failed."
         assert "Mock generation failure" not in data["detail"]
+    finally:
+        client.app.dependency_overrides.pop(get_qa_service, None)
+
+
+def test_qa_route_generation_timeout_returns_504(client: TestClient) -> None:
+    """Verify GenerationTimeoutError returns HTTP 504 with sanitized detail."""
+    c1 = make_retrieved_chunk(chunk_index=0, text="Legitimate text.")
+    mock_retrieval = MagicMock(spec=RetrievalService)
+    mock_retrieval.retrieve.return_value = RetrievalResponse(
+        query="Timeout query",
+        model_id="bge-small-en-v1.5",
+        returned_count=1,
+        results=[c1],
+    )
+
+    class TimeoutProvider:
+        model_id = "timeout-provider"
+
+        def generate_answer(self, query: str, evidence: Any) -> GenerationResult:
+            raise GenerationTimeoutError("Ollama generation timed out after 60.0s at http://127.0.0.1:11434")
+
+    mock_qa_service = QuestionAnsweringService(
+        retrieval_service=mock_retrieval,
+        generation_provider=TimeoutProvider(),
+    )
+
+    client.app.dependency_overrides[get_qa_service] = lambda: mock_qa_service
+    try:
+        response = client.post("/qa/answer", json={"query": "Timeout query?"})
+        assert response.status_code == status.HTTP_504_GATEWAY_TIMEOUT
+        data = response.json()
+        assert data["detail"] == "Answer generation timed out."
+        assert "60.0s" not in response.text
+        assert "11434" not in response.text
+        assert "127.0.0.1" not in response.text
+    finally:
+        client.app.dependency_overrides.pop(get_qa_service, None)
+
+
+def test_qa_route_generation_connection_refusal_returns_503(client: TestClient) -> None:
+    """Verify GenerationConnectionError returns HTTP 503 with sanitized detail."""
+    c1 = make_retrieved_chunk(chunk_index=0, text="Legitimate text.")
+    mock_retrieval = MagicMock(spec=RetrievalService)
+    mock_retrieval.retrieve.return_value = RetrievalResponse(
+        query="Connection query",
+        model_id="bge-small-en-v1.5",
+        returned_count=1,
+        results=[c1],
+    )
+
+    class ConnectionErrorProvider:
+        model_id = "connection-error-provider"
+
+        def generate_answer(self, query: str, evidence: Any) -> GenerationResult:
+            raise GenerationConnectionError("Unable to connect to Ollama server at 'http://localhost:11434'")
+
+    mock_qa_service = QuestionAnsweringService(
+        retrieval_service=mock_retrieval,
+        generation_provider=ConnectionErrorProvider(),
+    )
+
+    client.app.dependency_overrides[get_qa_service] = lambda: mock_qa_service
+    try:
+        response = client.post("/qa/answer", json={"query": "Connection query?"})
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        data = response.json()
+        assert data["detail"] == "Generation service is currently unavailable."
+        assert "localhost" not in response.text
+        assert "11434" not in response.text
+    finally:
+        client.app.dependency_overrides.pop(get_qa_service, None)
+
+
+def test_qa_route_unexpected_inference_failure_returns_500(client: TestClient) -> None:
+    """Verify unexpected GenerationInferenceError returns HTTP 500 with sanitized detail."""
+    c1 = make_retrieved_chunk(chunk_index=0, text="Legitimate text.")
+    mock_retrieval = MagicMock(spec=RetrievalService)
+    mock_retrieval.retrieve.return_value = RetrievalResponse(
+        query="Inference query",
+        model_id="bge-small-en-v1.5",
+        returned_count=1,
+        results=[c1],
+    )
+
+    class InferenceErrorProvider:
+        model_id = "inference-error-provider"
+
+        def generate_answer(self, query: str, evidence: Any) -> GenerationResult:
+            raise GenerationInferenceError("Ollama model 'qwen3:4b' produced an empty answer after sanitization.")
+
+    mock_qa_service = QuestionAnsweringService(
+        retrieval_service=mock_retrieval,
+        generation_provider=InferenceErrorProvider(),
+    )
+
+    client.app.dependency_overrides[get_qa_service] = lambda: mock_qa_service
+    try:
+        response = client.post("/qa/answer", json={"query": "Inference query?"})
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        data = response.json()
+        assert data["detail"] == "Answer generation failed."
+        assert "qwen3:4b" not in response.text
+        assert "empty answer" not in response.text
     finally:
         client.app.dependency_overrides.pop(get_qa_service, None)
 

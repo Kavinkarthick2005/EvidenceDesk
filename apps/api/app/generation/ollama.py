@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from app.generation.exceptions import (
+    GenerationConnectionError,
     GenerationInferenceError,
     GenerationTimeoutError,
     InvalidPromptError,
@@ -197,7 +198,7 @@ class OllamaGenerationProvider:
                 f"Ollama generation timed out after {self._timeout}s."
             ) from exc
         except httpx.ConnectError as exc:
-            raise GenerationInferenceError(
+            raise GenerationConnectionError(
                 f"Unable to connect to Ollama server at '{self._base_url}'. "
                 "Please verify that the Ollama daemon is running locally."
             ) from exc
@@ -210,6 +211,10 @@ class OllamaGenerationProvider:
             if status_code == 404:
                 raise GenerationInferenceError(
                     f"Ollama model '{self._model_id}' not found or /api/chat endpoint unavailable."
+                ) from exc
+            if status_code == 503:
+                raise GenerationConnectionError(
+                    "Ollama service is temporarily unavailable (HTTP 503)."
                 ) from exc
             raise GenerationInferenceError(
                 f"Ollama HTTP error {status_code} occurred during generation."

@@ -5,7 +5,11 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.generation.exceptions import GenerationError
+from app.generation.exceptions import (
+    GenerationConnectionError,
+    GenerationError,
+    GenerationTimeoutError,
+)
 from app.services.exceptions import (
     DocumentNotFoundError,
     DocumentPersistenceError,
@@ -131,6 +135,28 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Retrieval operation failed."},
+        )
+
+    @app.exception_handler(GenerationTimeoutError)
+    async def generation_timeout_handler(
+        request: Request,
+        exc: GenerationTimeoutError,
+    ) -> JSONResponse:
+        logger.error("Generation request timed out: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            content={"detail": "Answer generation timed out."},
+        )
+
+    @app.exception_handler(GenerationConnectionError)
+    async def generation_connection_handler(
+        request: Request,
+        exc: GenerationConnectionError,
+    ) -> JSONResponse:
+        logger.error("Generation connection failure: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Generation service is currently unavailable."},
         )
 
     @app.exception_handler(GenerationError)
